@@ -13,12 +13,12 @@ from openai import OpenAI
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from questions import answer_question
+from .questions import answer_question
 from .functions import functions, run_function
 import json
 
-df = pd.read_csv("processed/embeddings.csv", index_col=0)
-df["embeddings"] = df["embeddings"].apply(eval).apply(np.array)
+# df = pd.read_csv("processed/embeddings.csv", index_col=0)
+# df["embeddings"] = df["embeddings"].apply(eval).apply(np.array)
 
 load_dotenv()  # take environment variables from .env.
 
@@ -130,9 +130,9 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-async def mozilla(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    answer = answer_question(df, question=update.message.text, debug=True)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=answer)
+# async def mozilla(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# answer = answer_question(df, question=update.message.text, debug=True)
+# await context.bot.send_message(chat_id=update.effective_chat.id, text=answer)
 
 
 if __name__ == "__main__":
@@ -140,8 +140,8 @@ if __name__ == "__main__":
 
     start_handler = CommandHandler("start", start)
     chat_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), chat)
-    mozilla_handler = CommandHandler("mozilla", mozilla)
-    application.add_handler(mozilla_handler)
+    # mozilla_handler = CommandHandler("mozilla", mozilla)
+    # application.add_handler(mozilla_handler)
     application.add_handler(start_handler)
     application.add_handler(chat_handler)
 
