@@ -18,6 +18,16 @@ from .questions import answer_question
 from .functions import functions, run_function
 import json
 import requests
+from replicate import Client
+
+replicate_token = os.getenv("REPLICATE_API_TOKEN")
+
+client = Client(api_token=replicate_token)
+# FIXME: update the model and version to llama3
+model = client.models.get("meta/meta-llama-3-70b-instruct")
+version = model.versions.get(
+    "fbfb20b472b2f3bdd101412a9f70a0ed4fc0ced78a77ff00970ee7a2383c575d"
+)
 
 project_root = pathlib.Path(__file__).parent.resolve()
 embeddings_file_path = project_root.__str__() + "/processed/embeddings.csv"
@@ -71,9 +81,19 @@ messages = [
     {"role": "system", "content": CODE_PROMPT},
 ]
 
+message_history = []
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+
+
+# prompt generation for Llama model
+def generate_prompt(messages):
+    return "\n".join(
+        f"[INST] {message['text']} [/INST]" if message["isUser"] else message["text"]
+        for message in messages
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -82,57 +102,83 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    messages.append({"role": "user", "content": update.message.text})
-    initial_response = openai.chat.completions.create(
-        model="gpt-3.5-turbo", messages=messages, tools=functions
-    )
-    initial_response_message = initial_response.choices[0].message
-    messages.append(initial_response_message)
-    final_response = None
-    tool_calls = initial_response_message.tool_calls
-    if tool_calls:
-        for tool_call in tqdm(tool_calls, "Making calls to tools..."):
-            name = tool_call.function.name
-            args = json.loads(tool_call.function.arguments)
-            response = run_function(name, args)
-            print(tool_calls)
-            messages.append(
-                {
-                    "tool_call_id": tool_call.id,
-                    "role": "tool",
-                    "name": name,
-                    "content": str(response),
-                }
-            )
-            if name == "svg_to_png_bytes":
-                await context.bot.send_photo(
-                    chat_id=update.effective_chat.id, photo=response
-                )
-            # Generate the final response
-            final_response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=messages,
-            )
-            final_answer = final_response.choices[0].message
+# --- OpenAI chat
+# async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     messages.append({"role": "user", "content": update.message.text})
+#     initial_response = openai.chat.completions.create(
+#         model="gpt-3.5-turbo", messages=messages, tools=functions
+#     )
+#     initial_response_message = initial_response.choices[0].message
+#     messages.append(initial_response_message)
+#     final_response = None
+#     tool_calls = initial_response_message.tool_calls
+#     if tool_calls:
+#         for tool_call in tqdm(tool_calls, "Making calls to tools..."):
+#             name = tool_call.function.name
+#             args = json.loads(tool_call.function.arguments)
+#             response = run_function(name, args)
+#             print(tool_calls)
+#             messages.append(
+#                 {
+#                     "tool_call_id": tool_call.id,
+#                     "role": "tool",
+#                     "name": name,
+#                     "content": str(response),
+#                 }
+#             )
+#             if name == "svg_to_png_bytes":
+#                 await context.bot.send_photo(
+#                     chat_id=update.effective_chat.id, photo=response
+#                 )
+#             # Generate the final response
+#             final_response = openai.chat.completions.create(
+#                 model="gpt-3.5-turbo",
+#                 messages=messages,
+#             )
+#             final_answer = final_response.choices[0].message
 
-            # Send the final response if it exists
-            if final_answer:
-                messages.append(final_answer)
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id, text=final_answer.content
-                )
-            else:
-                # Send an error message if something went wrong
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text="something wrong happened, please try again",
-                )
-    # no functions were execute
-    else:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id, text=initial_response_message.content
-        )
+#             # Send the final response if it exists
+#             if final_answer:
+#                 messages.append(final_answer)
+#                 await context.bot.send_message(
+#                     chat_id=update.effective_chat.id, text=final_answer.content
+#                 )
+#             else:
+#                 # Send an error message if something went wrong
+#                 await context.bot.send_message(
+#                     chat_id=update.effective_chat.id,
+#                     text="something wrong happened, please try again",
+#                 )
+#     # no functions were execute
+#     else:
+#         await context.bot.send_message(
+#             chat_id=update.effective_chat.id, text=initial_response_message.content
+#         )
+#     await context.bot.send_message(
+#         chat_id=update.effective_chat.id, text="I'm a bot, please talk to me!"
+#     )
+
+
+# --- chat function (OSS version)
+async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Add User Message
+    message_history.append({"isUser": True, "text": update.message.text})
+    prompt = generate_prompt(message_history)
+    prediction = client.predictions.create(version=version, input={"prompt": prompt})
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id, text=prediction.status
+    )
+    prediction.wait()
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id, text=prediction.status
+    )
+    output = prediction.output
+    human_readable_output = "".join(output).strip()
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id, text=human_readable_output
+    )
+    # Add AI Message
+    message_history.append({"isUser": False, "text": human_readable_output})
 
 
 async def mozilla(update: Update, context: ContextTypes.DEFAULT_TYPE):

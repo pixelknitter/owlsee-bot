@@ -18,6 +18,8 @@ numpy = "^1.26.4"
 scipy = "^1.13.0"
 cairosvg = "^2.7.1"
 requests = "^2.31.0"
+replicate = "^0.26.0"
+datasets = "^2.19.1"
 
 
 [build-system]
