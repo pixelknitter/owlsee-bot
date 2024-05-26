@@ -158,9 +158,9 @@ async def transcribe_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     voice_id = update.message.voice.file_id
     if voice_id:
         file = await context.bot.get_file(voice_id)
-        await file.download_to_drive(f"voice_note_{voice_id}.ogg")
+        await file.download_to_drive(f"voice/note_{voice_id}.ogg")
         await update.message.reply_text("Voice note downloaded, transcribing now")
-        audio_file = open(f"voice_note_{voice_id}.ogg", "rb")
+        audio_file = open(f"voice/voice_note_{voice_id}.ogg", "rb")
         transcript = openai.audio.transcriptions.create(
             model="whisper-1", file=audio_file
         )
